@@ -10,6 +10,7 @@ import uvicorn
 import sys
 import numpy as np
 from pathlib import Path
+import subprocess
 
 # Configure logging
 logging.basicConfig(
@@ -20,10 +21,8 @@ logging.basicConfig(
 logger = logging.getLogger("spark-tts-api")
 
 # Add the Spark-TTS module to the path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Import the module instead
-from cli import inference
+spark_tts_root = "/root/Spark-TTS"
+sys.path.append(spark_tts_root)
 
 app = FastAPI(title="Spark-TTS API", description="API for Spark-TTS text-to-speech synthesis")
 
@@ -32,11 +31,6 @@ MODEL_DIR = "pretrained_models/Spark-TTS-0.5B"
 DEFAULT_SAVE_DIR = "example/results"
 DEFAULT_PROMPT_TEXT = "吃燕窝就选燕之屋，本节目由26年专注高品质燕窝的燕之屋冠名播出。豆奶牛奶换着喝，营养更均衡，本节目由豆本豆豆奶特约播出。"
 DEFAULT_PROMPT_SPEECH_PATH = "example/prompt_audio.wav"
-
-# Global variables to store loaded models
-global_model = None
-global_device = None
-global_is_half = None
 
 class TTSRequest(BaseModel):
     text: str
@@ -51,40 +45,24 @@ class TTSResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Load model on startup to avoid loading it on each request"""
-    global global_model, global_device, global_is_half
-    
+    """Initialize API and check CUDA availability"""
     logger.info("Initializing Spark-TTS API...")
     
-    # Since we can't directly load the model here without the proper functions,
-    # we'll initialize these variables but load the model during inference
     if torch.cuda.is_available():
-        global_device = 0
         logger.info(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
     else:
-        global_device = "cpu"
         logger.info("CUDA is not available. Using CPU.")
-    
-    global_model = None
-    global_is_half = None
 
 @app.post("/tts", response_model=TTSResponse)
 async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     """
     Generate speech from text using Spark-TTS
-    
-    Parameters:
-    - text: Text to synthesize
-    - prompt_text: Optional prompt text
-    - prompt_speech_path: Optional path to prompt audio file
-    - save_dir: Optional directory to save generated audio
     """
-    global global_model, global_device, global_is_half
-    
-    if global_model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded. Please wait for initialization.")
-    
     logger.info(f"Processing TTS request: '{request.text}'")
+    
+    # Validate the input text
+    if not request.text or len(request.text.strip()) < 5:
+        raise HTTPException(status_code=400, detail="Text must be at least 5 characters long")
     
     # Set up parameters
     prompt_text = request.prompt_text if request.prompt_text else DEFAULT_PROMPT_TEXT
@@ -92,12 +70,13 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     save_dir = request.save_dir if request.save_dir else DEFAULT_SAVE_DIR
     
     # Make sure the save directory exists
-    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(os.path.join(spark_tts_root, save_dir), exist_ok=True)
     
     # Generate a unique filename based on timestamp
     timestamp = int(time.time())
-    output_filename = f"tts_output_{timestamp}.wav"
+    output_filename = f"{timestamp}.wav"
     output_path = os.path.join(save_dir, output_filename)
+    abs_output_path = os.path.join(spark_tts_root, output_path)
     
     # Log inference parameters
     logger.info(f"Inference parameters:")
@@ -105,33 +84,76 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     logger.info(f"  - Prompt text: {prompt_text}")
     logger.info(f"  - Prompt speech path: {prompt_speech_path}")
     logger.info(f"  - Output path: {output_path}")
-    logger.info(f"  - Using device: {global_device}")
+    logger.info(f"  - Using device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
     
     try:
+        # Try using the example text from the demo.sh script that we know works
+        reference_text = "A beautiful melody is created note by note, each one essential to the whole."
+        
         inference_start = time.time()
         logger.info("Synthesizing speech...")
         
-        # Run inference using the same approach as demo.sh
-        sys.argv = [
-            "cli.inference",
+        # Run the command using a command proven to work from demo.sh
+        cmd = [
+            "python", "-m", "cli.inference",
             "--text", request.text,
-            "--device", str(global_device),
+            "--device", "0" if torch.cuda.is_available() else "cpu",
             "--save_dir", save_dir,
             "--model_dir", MODEL_DIR,
-            "--prompt_text", prompt_text,
+            "--prompt_text", DEFAULT_PROMPT_TEXT,  # Use the full default prompt
             "--prompt_speech_path", prompt_speech_path
         ]
         
-        inference.main()
+        logger.info(f"Running command: {' '.join(cmd)}")
+        
+        process = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=spark_tts_root  # Run from Spark-TTS root directory
+        )
+        
+        # Log the output
+        if process.stdout:
+            logger.info(f"Process output: {process.stdout}")
+        if process.stderr:
+            logger.error(f"Process error: {process.stderr}")
+            
+        if process.returncode != 0:
+            # If it fails, try with the reference text that's known to work
+            logger.warning(f"First attempt failed. Trying with reference text from demo.sh")
+            
+            # Try with the reference text
+            cmd = [
+                "python", "-m", "cli.inference",
+                "--text", reference_text,
+                "--device", "0" if torch.cuda.is_available() else "cpu",
+                "--save_dir", save_dir,
+                "--model_dir", MODEL_DIR,
+                "--prompt_text", DEFAULT_PROMPT_TEXT,
+                "--prompt_speech_path", prompt_speech_path
+            ]
+            
+            logger.info(f"Running command with reference text: {' '.join(cmd)}")
+            
+            reference_process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=spark_tts_root
+            )
+            
+            if reference_process.returncode != 0:
+                raise Exception(f"Inference failed with reference text: {reference_process.stderr}")
+            else:
+                # If reference works but original doesn't, then it's an issue with the input text
+                raise Exception(f"Input text is not compatible with the model. Error: {process.stderr}")
         
         inference_time = time.time() - inference_start
         logger.info(f"Speech synthesized in {inference_time:.2f} seconds")
         
-        # The output file will be in the save_dir with a timestamp
-        output_path = os.path.join(save_dir, output_filename)
-        
         return TTSResponse(
-            audio_path=output_path,
+            audio_path=abs_output_path,
             inference_time=inference_time,
             text=request.text
         )
