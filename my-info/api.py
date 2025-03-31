@@ -22,8 +22,8 @@ logger = logging.getLogger("spark-tts-api")
 # Add the Spark-TTS module to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import Spark-TTS modules
-from cli.inference import load_model, load_prompt_audio, synthesize
+# Import the module instead
+from cli import inference
 
 app = FastAPI(title="Spark-TTS API", description="API for Spark-TTS text-to-speech synthesis")
 
@@ -56,36 +56,17 @@ async def startup_event():
     
     logger.info("Initializing Spark-TTS API...")
     
-    # Check for CUDA availability
+    # Since we can't directly load the model here without the proper functions,
+    # we'll initialize these variables but load the model during inference
     if torch.cuda.is_available():
-        device = 0
-        logger.info(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(device)}")
+        global_device = 0
+        logger.info(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
     else:
-        device = "cpu"
+        global_device = "cpu"
         logger.info("CUDA is not available. Using CPU.")
     
-    global_device = device
-    
-    start_time = time.time()
-    logger.info(f"Loading model from {MODEL_DIR}...")
-    
-    # Load the model
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, default=MODEL_DIR)
-    parser.add_argument("--device", type=str, default=device)
-    args = parser.parse_args([])
-    
-    model, is_half = load_model(args)
-    global_model = model
-    global_is_half = is_half
-    
-    # Log model loading time and GPU memory usage
-    load_time = time.time() - start_time
-    logger.info(f"Model loaded in {load_time:.2f} seconds")
-    
-    if torch.cuda.is_available():
-        logger.info(f"GPU Memory allocated: {torch.cuda.memory_allocated(device) / 1024**2:.2f} MB")
-        logger.info(f"GPU Memory reserved: {torch.cuda.memory_reserved(device) / 1024**2:.2f} MB")
+    global_model = None
+    global_is_half = None
 
 @app.post("/tts", response_model=TTSResponse)
 async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
@@ -127,39 +108,27 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     logger.info(f"  - Using device: {global_device}")
     
     try:
-        # Load prompt audio
-        start_time = time.time()
-        logger.info("Loading prompt audio...")
-        prompt_audio = load_prompt_audio(prompt_speech_path)
-        logger.info(f"Prompt audio loaded in {time.time() - start_time:.2f} seconds")
-        
-        # Synthesize speech
         inference_start = time.time()
         logger.info("Synthesizing speech...")
         
-        # Create a parser with the required arguments
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--text", type=str, default=request.text)
-        parser.add_argument("--device", type=str, default=global_device)
-        parser.add_argument("--save_dir", type=str, default=save_dir)
-        parser.add_argument("--model_dir", type=str, default=MODEL_DIR)
-        parser.add_argument("--prompt_text", type=str, default=prompt_text)
-        args = parser.parse_args([])
+        # Run inference using the same approach as demo.sh
+        sys.argv = [
+            "cli.inference",
+            "--text", request.text,
+            "--device", str(global_device),
+            "--save_dir", save_dir,
+            "--model_dir", MODEL_DIR,
+            "--prompt_text", prompt_text,
+            "--prompt_speech_path", prompt_speech_path
+        ]
         
-        # Override output path
-        synthesize(
-            args=args,
-            model=global_model,
-            is_half=global_is_half,
-            prompt_audio=prompt_audio,
-            output_path=output_path
-        )
+        inference.main()
         
         inference_time = time.time() - inference_start
         logger.info(f"Speech synthesized in {inference_time:.2f} seconds")
         
-        if torch.cuda.is_available():
-            logger.info(f"GPU Memory allocated: {torch.cuda.memory_allocated(global_device) / 1024**2:.2f} MB")
+        # The output file will be in the save_dir with a timestamp
+        output_path = os.path.join(save_dir, output_filename)
         
         return TTSResponse(
             audio_path=output_path,
@@ -172,4 +141,4 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=f"Error during speech synthesis: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("api:app", host="0.0.0.0", port=7860, reload=False)

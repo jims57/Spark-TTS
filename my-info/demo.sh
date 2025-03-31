@@ -21,12 +21,23 @@ echo "   - Model: Spark-TTS-0.5B"
 echo "   - Input text: 'A beautiful melody is created note by note, each one essential to the whole.'"
 echo "   - Output directory: example/results"
 echo "------------------------------------------------"
+
+# Check CUDA availability
+CUDA_AVAILABLE=$(python -c "import torch; print(int(torch.cuda.is_available()))")
+if [ "$CUDA_AVAILABLE" -eq 1 ]; then
+    echo "✅ CUDA is available - using GPU acceleration"
+    DEVICE=0
+else
+    echo "⚠️ CUDA is not available - falling back to CPU"
+    DEVICE="cpu"
+fi
+
 echo "⏳ Processing... Please wait..."
 
 # Run the TTS model
 python -m cli.inference \
     --text "A beautiful melody is created note by note, each one essential to the whole." \
-    --device 0 \
+    --device $DEVICE \
     --save_dir "example/results" \
     --model_dir "pretrained_models/Spark-TTS-0.5B" \
     --prompt_text "吃燕窝就选燕之屋，本节目由26年专注高品质燕窝的燕之屋冠名播出。豆奶牛奶换着喝，营养更均衡，本节目由豆本豆豆奶特约播出。" \
