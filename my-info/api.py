@@ -94,18 +94,11 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     # Make sure the save directory exists
     os.makedirs(os.path.join(spark_tts_root, save_dir), exist_ok=True)
     
-    # Generate a unique filename based on timestamp
-    timestamp = int(time.time())
-    output_filename = f"{timestamp}.wav"
-    output_path = os.path.join(save_dir, output_filename)
-    abs_output_path = os.path.join(spark_tts_root, output_path)
-    
     # Log inference parameters
     logger.info(f"Inference parameters:")
     logger.info(f"  - Text: {request.text}")
     logger.info(f"  - Prompt text2: {prompt_text}")
     logger.info(f"  - Prompt speech path: {prompt_speech_path}")
-    logger.info(f"  - Output path: {output_path}")
     logger.info(f"  - Using device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
     
     try:
