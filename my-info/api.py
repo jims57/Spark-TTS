@@ -133,7 +133,9 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         if process.stdout:
             logger.info(f"Process output: {process.stdout}")
         if process.stderr:
-            logger.error(f"Process error: {process.stderr}")
+            # Instead of logging all stderr as errors, log as info
+            # since Spark-TTS sends regular logs to stderr
+            logger.info(f"Process stderr: {process.stderr}")
         
         # Extract the saved filename from output
         saved_filename = ""
