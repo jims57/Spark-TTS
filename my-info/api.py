@@ -39,9 +39,12 @@ class TTSRequest(BaseModel):
     save_dir: Optional[str] = None
 
 class TTSResponse(BaseModel):
-    audio_path: str
-    inference_time: float
-    text: str
+    errcode: int = 0
+    message: str = "success"
+    data: dict = {
+        "inference_time": 0.0,
+        "text": ""
+    }
 
 @app.on_event("startup")
 async def startup_event():
@@ -171,14 +174,24 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         logger.info(f"Speech synthesized in {inference_time:.2f} seconds")
         
         return TTSResponse(
-            audio_path=abs_output_path,
-            inference_time=inference_time,
-            text=request.text
+            errcode=0,
+            message="success",
+            data={
+                "inference_time": inference_time,
+                "text": request.text
+            }
         )
     
     except Exception as e:
         logger.error(f"Error during speech synthesis: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error during speech synthesis: {str(e)}")
+        return TTSResponse(
+            errcode=500,
+            message=f"Error during speech synthesis: {str(e)}",
+            data={
+                "inference_time": 0.0,
+                "text": request.text
+            }
+        )
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=7860, reload=False)
