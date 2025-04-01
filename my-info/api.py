@@ -3,6 +3,7 @@ import time
 import torch
 import logging
 import argparse
+import hashlib
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -136,12 +137,13 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         
         # Extract the saved filename from output
         saved_filename = ""
+        full_file_path = ""
         # Check in stderr first (where the logs are)
         if process.stderr:
             for line in process.stderr.split('\n'):
                 if "Audio saved at:" in line:
-                    file_path = line.split("Audio saved at:")[-1].strip()
-                    saved_filename = os.path.basename(file_path)
+                    full_file_path = line.split("Audio saved at:")[-1].strip()
+                    saved_filename = os.path.basename(full_file_path)
                     logger.info(f"Extracted saved filename: {saved_filename}")
                     break
         
@@ -149,8 +151,8 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         if not saved_filename and process.stdout:
             for line in process.stdout.split('\n'):
                 if "Audio saved at:" in line:
-                    file_path = line.split("Audio saved at:")[-1].strip()
-                    saved_filename = os.path.basename(file_path)
+                    full_file_path = line.split("Audio saved at:")[-1].strip()
+                    saved_filename = os.path.basename(full_file_path)
                     logger.info(f"Extracted saved filename: {saved_filename}")
                     break
         
@@ -187,13 +189,37 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         inference_time = time.time() - inference_start
         logger.info(f"Speech synthesized in {inference_time:.2f} seconds")
         
+        # Rename the file to MD5 format if a file was successfully generated
+        md5_filename = saved_filename
+        if saved_filename and os.path.exists(full_file_path):
+            try:
+                # Calculate MD5 hash of the audio file
+                md5_hash = hashlib.md5()
+                with open(full_file_path, 'rb') as f:
+                    for chunk in iter(lambda: f.read(4096), b''):
+                        md5_hash.update(chunk)
+                
+                # Create new filename with MD5 hash
+                file_ext = os.path.splitext(saved_filename)[1]
+                md5_filename = f"{md5_hash.hexdigest()}{file_ext}"
+                
+                # Generate the new full path
+                new_full_path = os.path.join(os.path.dirname(full_file_path), md5_filename)
+                
+                # Rename the file
+                os.rename(full_file_path, new_full_path)
+                logger.info(f"File renamed from {saved_filename} to {md5_filename}")
+            except Exception as e:
+                logger.error(f"Error renaming file to MD5 format: {e}")
+                # Keep the original filename if renaming fails
+        
         return TTSResponse(
             errcode=0,
             message="success",
             data={
                 "inference_time": inference_time,
                 "text": request.text,
-                "saved_filename": saved_filename
+                "saved_filename": md5_filename
             }
         )
     
