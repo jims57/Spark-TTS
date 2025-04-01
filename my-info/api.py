@@ -65,9 +65,27 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Text must be at least 5 characters long")
     
     # Set up parameters
-    prompt_text = request.prompt_text if request.prompt_text else DEFAULT_PROMPT_TEXT
-    prompt_speech_path = request.prompt_speech_path if request.prompt_speech_path else DEFAULT_PROMPT_SPEECH_PATH
-    save_dir = request.save_dir if request.save_dir else DEFAULT_SAVE_DIR
+    # Set parameters with detailed logging
+    if request.prompt_text:
+        prompt_text = request.prompt_text
+        logger.info(f"Using provided prompt text: {prompt_text}")
+    else:
+        prompt_text = DEFAULT_PROMPT_TEXT
+        logger.info(f"Using default prompt text: {prompt_text}")
+    
+    if request.prompt_speech_path:
+        prompt_speech_path = request.prompt_speech_path
+        logger.info(f"Using provided prompt speech path: {prompt_speech_path}")
+    else:
+        prompt_speech_path = DEFAULT_PROMPT_SPEECH_PATH
+        logger.info(f"Using default prompt speech path: {prompt_speech_path}")
+    
+    if request.save_dir:
+        save_dir = request.save_dir
+        logger.info(f"Using provided save directory: {save_dir}")
+    else:
+        save_dir = DEFAULT_SAVE_DIR
+        logger.info(f"Using default save directory: {save_dir}")
     
     # Make sure the save directory exists
     os.makedirs(os.path.join(spark_tts_root, save_dir), exist_ok=True)
@@ -81,7 +99,7 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     # Log inference parameters
     logger.info(f"Inference parameters:")
     logger.info(f"  - Text: {request.text}")
-    logger.info(f"  - Prompt text: {prompt_text}")
+    logger.info(f"  - Prompt text2: {prompt_text}")
     logger.info(f"  - Prompt speech path: {prompt_speech_path}")
     logger.info(f"  - Output path: {output_path}")
     logger.info(f"  - Using device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
@@ -100,7 +118,7 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             "--device", "0" if torch.cuda.is_available() else "cpu",
             "--save_dir", save_dir,
             "--model_dir", MODEL_DIR,
-            "--prompt_text", DEFAULT_PROMPT_TEXT,  # Use the full default prompt
+            "--prompt_text", prompt_text,  # Use the full default prompt
             "--prompt_speech_path", prompt_speech_path
         ]
         
@@ -130,7 +148,7 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
                 "--device", "0" if torch.cuda.is_available() else "cpu",
                 "--save_dir", save_dir,
                 "--model_dir", MODEL_DIR,
-                "--prompt_text", DEFAULT_PROMPT_TEXT,
+                "--prompt_text", prompt_text,
                 "--prompt_speech_path", prompt_speech_path
             ]
             
