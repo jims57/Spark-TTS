@@ -203,17 +203,23 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
                 
                 # Create new filename with MD5 hash
                 file_ext = os.path.splitext(saved_filename)[1]
-                md5_filename = f"{md5_hash.hexdigest()}{file_ext}"
+                md5_hash_str = md5_hash.hexdigest()
+                md5_filename = f"{md5_hash_str}{file_ext}"
                 
-                # Generate the new full path
-                new_full_path = os.path.join(os.path.dirname(full_file_path), md5_filename)
+                # Create MD5 folder
+                md5_folder_path = os.path.join(os.path.dirname(full_file_path), md5_hash_str)
+                os.makedirs(md5_folder_path, exist_ok=True)
+                logger.info(f"Created MD5 folder: {md5_folder_path}")
                 
-                # Rename the file
+                # Generate the new full path inside the MD5 folder
+                new_full_path = os.path.join(md5_folder_path, md5_filename)
+                
+                # Move the file to the MD5 folder
                 os.rename(full_file_path, new_full_path)
-                logger.info(f"File renamed from {saved_filename} to {md5_filename}")
+                logger.info(f"File moved from {full_file_path} to {new_full_path}")
             except Exception as e:
-                logger.error(f"Error renaming file to MD5 format: {e}")
-                # Keep the original filename if renaming fails
+                logger.error(f"Error processing file with MD5 format: {e}")
+                # Keep the original filename if processing fails
         
         return TTSResponse(
             errcode=0,
