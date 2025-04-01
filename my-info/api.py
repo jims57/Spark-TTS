@@ -217,6 +217,12 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
                 # Move the file to the MD5 folder
                 os.rename(full_file_path, new_full_path)
                 logger.info(f"File moved from {full_file_path} to {new_full_path}")
+                
+                # Create a text file in the MD5 folder with the input text
+                txt_file_path = os.path.join(md5_folder_path, f"{md5_hash_str}.txt")
+                with open(txt_file_path, 'w', encoding='utf-8') as txt_file:
+                    txt_file.write(request.text)
+                logger.info(f"Created text file with input content: {txt_file_path}")
             except Exception as e:
                 logger.error(f"Error processing file with MD5 format: {e}")
                 # Keep the original filename if processing fails
