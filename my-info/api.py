@@ -43,7 +43,8 @@ class TTSResponse(BaseModel):
     message: str = "success"
     data: dict = {
         "inference_time": 0.0,
-        "text": ""
+        "text": "",
+        "saved_filename": ""
     }
 
 @app.on_event("startup")
@@ -139,7 +140,27 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             logger.info(f"Process output: {process.stdout}")
         if process.stderr:
             logger.error(f"Process error: {process.stderr}")
-            
+        
+        # Extract the saved filename from output
+        saved_filename = ""
+        # Check in stderr first (where the logs are)
+        if process.stderr:
+            for line in process.stderr.split('\n'):
+                if "Audio saved at:" in line:
+                    file_path = line.split("Audio saved at:")[-1].strip()
+                    saved_filename = os.path.basename(file_path)
+                    logger.info(f"Extracted saved filename: {saved_filename}")
+                    break
+        
+        # Also check stdout just in case
+        if not saved_filename and process.stdout:
+            for line in process.stdout.split('\n'):
+                if "Audio saved at:" in line:
+                    file_path = line.split("Audio saved at:")[-1].strip()
+                    saved_filename = os.path.basename(file_path)
+                    logger.info(f"Extracted saved filename: {saved_filename}")
+                    break
+        
         if process.returncode != 0:
             # If it fails, try with the reference text that's known to work
             logger.warning(f"First attempt failed. Trying with reference text from demo.sh")
@@ -178,7 +199,8 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             message="success",
             data={
                 "inference_time": inference_time,
-                "text": request.text
+                "text": request.text,
+                "saved_filename": saved_filename
             }
         )
     
@@ -189,7 +211,8 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             message=f"Error during speech synthesis: {str(e)}",
             data={
                 "inference_time": 0.0,
-                "text": request.text
+                "text": request.text,
+                "saved_filename": ""
             }
         )
 
