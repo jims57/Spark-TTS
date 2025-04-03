@@ -48,8 +48,6 @@ app = FastAPI(
 # Model and device configuration
 MODEL_DIR = "pretrained_models/Spark-TTS-0.5B"
 DEFAULT_SAVE_DIR = "example/results"
-DEFAULT_PROMPT_TEXT = "吃燕窝就选燕之屋，本节目由26年专注高品质燕窝的燕之屋冠名播出。豆奶牛奶换着喝，营养更均衡，本节目由豆本豆豆奶特约播出。"
-DEFAULT_PROMPT_SPEECH_PATH = "example/prompt_audio.wav"
 
 class TTSRequest(BaseModel):
     text: str
@@ -80,22 +78,43 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         reference_text = request.reference_text
         logger.info(f"Using provided reference text: {reference_text}")
     else:
-        reference_text = "我们每个人都在追求不同的目标，很多人认为成功就是要赚很多钱"
-        logger.info(f"Using default reference text: {reference_text}")
+        return TTSResponse(
+            errcode=400,
+            message="Reference text is required",
+            data={
+                "inference_time": 0.0,
+                "text": request.text,
+                "saved_filename": ""
+            }
+        )
     
     if request.reference_audio:
         reference_audio = request.reference_audio
         logger.info(f"Using provided reference audio: {reference_audio}")
     else:
-        reference_audio = "example/mayun_zh-short1.wav"
-        logger.info(f"Using default reference audio: {reference_audio}")
+        return TTSResponse(
+            errcode=400,
+            message="Reference audio is required",
+            data={
+                "inference_time": 0.0,
+                "text": request.text,
+                "saved_filename": ""
+            }
+        )
     
     if request.save_dir:
         save_dir = request.save_dir
         logger.info(f"Using provided save directory: {save_dir}")
     else:
-        save_dir = DEFAULT_SAVE_DIR
-        logger.info(f"Using default save directory: {save_dir}")
+        return TTSResponse(
+            errcode=400,
+            message="Save directory is required",
+            data={
+                "inference_time": 0.0,
+                "text": request.text,
+                "saved_filename": ""
+            }
+        )
     
     # Make sure the save directory exists
     os.makedirs(os.path.join(spark_tts_root, save_dir), exist_ok=True)
@@ -121,9 +140,15 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         # Check if the reference audio exists
         if not os.path.exists(ref_audio_path):
             logger.warning(f"Reference audio file not found: {ref_audio_path}")
-            reference_audio = "example/mayun_zh-short1.wav"
-            ref_audio_path = os.path.join(spark_tts_root, reference_audio)
-            logger.info(f"Using default reference audio: {ref_audio_path}")
+            return TTSResponse(
+                errcode=400,
+                message=f"Reference audio file not found: {reference_audio}",
+                data={
+                    "inference_time": 0.0,
+                    "text": request.text,
+                    "saved_filename": ""
+                }
+            )
         
         # Process reference audio - check if it's 16kHz mono and convert if needed
         processed_ref_audio_path = ref_audio_path
@@ -166,9 +191,9 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             logger.error(f"ERROR DURING AUDIO CONVERSION: {str(e)}")
             logger.warning("Using the original reference audio file")
         
-        # Run the command
+        # Run the command with python3 which is verified to work with English text
         cmd = [
-            "python",  # Explicitly use python interpreter
+            "python3",
             client_script,
             "--server-url", "localhost:9002",
             "--output-audio", output_path,
@@ -193,7 +218,8 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         if process.stderr:
             logger.info(f"Process stderr: {process.stderr}")
         
-        if process.returncode != 0:
+        # Ignore KeyError: 'outputs' as it doesn't affect audio generation
+        if process.returncode != 0 and "KeyError: 'outputs'" not in process.stderr:
             raise Exception(f"Error running client_http.py: {process.stderr}")
         
         # Use output.wav as the saved file since we specified it
