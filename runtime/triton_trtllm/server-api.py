@@ -47,7 +47,6 @@ app = FastAPI(
 
 # Model and device configuration
 MODEL_DIR = "pretrained_models/Spark-TTS-0.5B"
-DEFAULT_SAVE_DIR = "example/results"
 
 class TTSRequest(BaseModel):
     text: str
