@@ -63,7 +63,8 @@ class TTSResponse(BaseModel):
     data: dict = {
         "inference_time": 0.0,
         "text": "",
-        "saved_filename": ""
+        "saved_filename": "",
+        "cached": False
     }
 
 @app.post("/tts", response_model=TTSResponse)
@@ -74,6 +75,10 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     # Validate the input text
     if not request.text or len(request.text.strip()) < 5:
         raise HTTPException(status_code=400, detail="Text must be at least 5 characters long")
+    
+    # Calculate MD5 hash of the input text
+    text_md5 = hashlib.md5(request.text.encode('utf-8')).hexdigest()
+    logger.info(f"Text MD5 hash: {text_md5}")
     
     # Set up parameters with detailed logging
     if request.reference_text:
@@ -99,6 +104,28 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     
     # Make sure the save directory exists
     os.makedirs(os.path.join(spark_tts_root, save_dir), exist_ok=True)
+    
+    # Create MD5 folder path
+    md5_folder_path = os.path.join(spark_tts_root, save_dir, text_md5)
+    md5_filename = f"{text_md5}.wav"
+    cached_audio_path = os.path.join(md5_folder_path, md5_filename)
+    
+    # Check if the folder with this MD5 already exists (meaning we've processed this text before)
+    if os.path.exists(md5_folder_path) and os.path.exists(cached_audio_path):
+        logger.info(f"Found existing audio for identical text with MD5: {text_md5}")
+        logger.info(f"Using cached audio from: {cached_audio_path}")
+        
+        # Return the cached result without running inference
+        return TTSResponse(
+            errcode=0,
+            message="success (cached)",
+            data={
+                "inference_time": 0.0,
+                "text": request.text,
+                "saved_filename": md5_filename,
+                "cached": True
+            }
+        )
     
     try:
         inference_start = time.time()
@@ -203,25 +230,12 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         inference_time = time.time() - inference_start
         logger.info(f"Speech synthesized in {inference_time:.2f} seconds")
         
-        # Rename the file to MD5 format if a file was successfully generated
-        md5_filename = saved_filename
+        # Create MD5 folder and move file
         if os.path.exists(full_file_path):
             try:
-                # Calculate MD5 hash of the audio file
-                md5_hash = hashlib.md5()
-                with open(full_file_path, 'rb') as f:
-                    for chunk in iter(lambda: f.read(4096), b''):
-                        md5_hash.update(chunk)
-                
-                # Create new filename with MD5 hash
-                file_ext = os.path.splitext(saved_filename)[1]
-                md5_hash_str = md5_hash.hexdigest()
-                md5_filename = f"{md5_hash_str}{file_ext}"
-                
                 # Create MD5 folder
-                md5_folder_path = os.path.join(os.path.dirname(full_file_path), md5_hash_str)
                 os.makedirs(md5_folder_path, exist_ok=True)
-                logger.info(f"Created MD5 folder: {md5_folder_path}")
+                logger.info(f"Created MD5 folder for text: {md5_folder_path}")
                 
                 # Generate the new full path inside the MD5 folder
                 new_full_path = os.path.join(md5_folder_path, md5_filename)
@@ -231,21 +245,21 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
                 logger.info(f"File moved from {full_file_path} to {new_full_path}")
                 
                 # Create a text file in the MD5 folder with the input text
-                txt_file_path = os.path.join(md5_folder_path, f"{md5_hash_str}.txt")
+                txt_file_path = os.path.join(md5_folder_path, f"{text_md5}.txt")
                 with open(txt_file_path, 'w', encoding='utf-8') as txt_file:
                     txt_file.write(request.text)
                 logger.info(f"Created text file with input content: {txt_file_path}")
             except Exception as e:
                 logger.error(f"Error processing file with MD5 format: {e}")
-                # Keep the original filename if processing fails
         
         return TTSResponse(
             errcode=0,
-            message="success",
+            message="success (new generation)",
             data={
                 "inference_time": inference_time,
                 "text": request.text,
-                "saved_filename": md5_filename
+                "saved_filename": md5_filename,
+                "cached": False
             }
         )
     
@@ -257,7 +271,8 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             data={
                 "inference_time": 0.0,
                 "text": request.text,
-                "saved_filename": ""
+                "saved_filename": "",
+                "cached": False
             }
         )
 
