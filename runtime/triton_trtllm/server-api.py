@@ -137,7 +137,11 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
             
             # Check if conversion is needed (not 16kHz or not mono)
             if sr != 16000 or channels > 1:
-                logger.info(f"Converting reference audio to 16kHz mono format")
+                logger.warning(f"AUDIO CONVERSION NEEDED: '{ref_audio_path}' is not in 16kHz mono format")
+                if sr != 16000:
+                    logger.warning(f"SAMPLE RATE CONVERSION: Converting from {sr}Hz to 16000Hz")
+                if channels > 1:
+                    logger.warning(f"CHANNEL CONVERSION: Converting from {channels} channels to mono")
                 
                 # Create a processed version with _16k_mono suffix
                 file_name, ext = os.path.splitext(ref_audio_path)
@@ -146,18 +150,20 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
                 # Convert to mono if needed
                 if channels > 1:
                     y = librosa.to_mono(y)
+                    logger.info(f"Converted audio to mono")
                 
                 # Resample to 16kHz if needed
                 if sr != 16000:
                     y = librosa.resample(y, orig_sr=sr, target_sr=16000)
+                    logger.info(f"Resampled audio to 16kHz")
                 
                 # Save processed audio
                 sf.write(processed_ref_audio_path, y, 16000, 'PCM_16')
-                logger.info(f"Converted audio saved to: {processed_ref_audio_path}")
+                logger.warning(f"AUDIO CONVERSION COMPLETE: Saved 16kHz mono version to '{processed_ref_audio_path}'")
             else:
                 logger.info("Reference audio is already in the correct format (16kHz mono)")
         except Exception as e:
-            logger.warning(f"Error processing reference audio: {str(e)}")
+            logger.error(f"ERROR DURING AUDIO CONVERSION: {str(e)}")
             logger.warning("Using the original reference audio file")
         
         # Run the command
