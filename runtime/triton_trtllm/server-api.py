@@ -72,6 +72,22 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     if not request.text or len(request.text.strip()) < 5:
         raise HTTPException(status_code=400, detail="Text must be at least 5 characters long")
     
+    # Add period if missing
+    text = request.text.strip()
+    # Check if text contains Chinese characters
+    has_chinese = any('\u4e00' <= char <= '\u9fff' for char in text)
+    
+    if has_chinese:
+        if not text.endswith('。'):
+            text = text + '。'
+            logger.info(f"Added Chinese period. Updated text: '{text}'")
+    else:  # Assume English
+        if not text.endswith('.'):
+            text = text + '.'
+            logger.info(f"Added English period. Updated text: '{text}'")
+    
+    request.text = text
+    
     # Set up parameters with detailed logging
     if request.reference_text:
         reference_text = request.reference_text
