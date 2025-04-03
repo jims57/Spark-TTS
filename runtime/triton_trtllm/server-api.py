@@ -13,6 +13,8 @@ import numpy as np
 from pathlib import Path
 import subprocess
 from contextlib import asynccontextmanager
+import librosa
+import soundfile as sf
 
 # Configure logging
 logging.basicConfig(
@@ -116,13 +118,55 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
         if not os.path.exists(client_script):
             raise Exception(f"Client script not found at {client_script}")
         
+        # Check if the reference audio exists
+        if not os.path.exists(ref_audio_path):
+            logger.warning(f"Reference audio file not found: {ref_audio_path}")
+            reference_audio = "example/mayun_zh-short1.wav"
+            ref_audio_path = os.path.join(spark_tts_root, reference_audio)
+            logger.info(f"Using default reference audio: {ref_audio_path}")
+        
+        # Process reference audio - check if it's 16kHz mono and convert if needed
+        processed_ref_audio_path = ref_audio_path
+        try:
+            # Check audio properties using librosa
+            y, sr = librosa.load(ref_audio_path, sr=None, mono=False)
+            
+            # Log original audio properties
+            channels = 1 if len(y.shape) == 1 else y.shape[0]
+            logger.info(f"Reference audio properties: Sample rate: {sr} Hz, Channels: {channels}")
+            
+            # Check if conversion is needed (not 16kHz or not mono)
+            if sr != 16000 or channels > 1:
+                logger.info(f"Converting reference audio to 16kHz mono format")
+                
+                # Create a processed version with _16k_mono suffix
+                file_name, ext = os.path.splitext(ref_audio_path)
+                processed_ref_audio_path = f"{file_name}_16k_mono{ext}"
+                
+                # Convert to mono if needed
+                if channels > 1:
+                    y = librosa.to_mono(y)
+                
+                # Resample to 16kHz if needed
+                if sr != 16000:
+                    y = librosa.resample(y, orig_sr=sr, target_sr=16000)
+                
+                # Save processed audio
+                sf.write(processed_ref_audio_path, y, 16000, 'PCM_16')
+                logger.info(f"Converted audio saved to: {processed_ref_audio_path}")
+            else:
+                logger.info("Reference audio is already in the correct format (16kHz mono)")
+        except Exception as e:
+            logger.warning(f"Error processing reference audio: {str(e)}")
+            logger.warning("Using the original reference audio file")
+        
         # Run the command
         cmd = [
             "python",  # Explicitly use python interpreter
             client_script,
             "--server-url", "localhost:9002",
             "--output-audio", output_path,
-            "--reference-audio", ref_audio_path,
+            "--reference-audio", processed_ref_audio_path,
             "--reference-text", reference_text,
             "--target-text", request.text
         ]
