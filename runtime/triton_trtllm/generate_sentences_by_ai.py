@@ -6,7 +6,7 @@ import sys
 
 def generate_sentences(total_sentences=10):
     # Prepare prompt with dynamic number of sentences
-    prompt = f"""generate {total_sentences} random English sentences(less than 25 words) line by line, make the sentences use as many as possible words but common used in daily life, make sentences covers diff topics and fields, especially daily spoken languages, for we use these for asr model training as dataset, format like this(not blank line before them, just line by line):
+    prompt = f"""generate {total_sentences} random English sentences(less than 25 words) line by line, make the sentences use as many as possible words but common used in daily life, make sentences covers diff topics and fields, especially daily spoken languages, for we use these for asr model training as dataset, format like this(not blank line before them, just line by line). Sentences can only include zero or one comma in the middle of the sentence:
     1. xxxx.
     2. yyyy.
     """
