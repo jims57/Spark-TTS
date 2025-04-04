@@ -78,11 +78,13 @@ async def tts(request: TTSRequest, background_tasks: BackgroundTasks):
     has_chinese = any('\u4e00' <= char <= '\u9fff' for char in text)
     
     if has_chinese:
-        if not text.endswith('。'):
+        # Check if text ends with Chinese question mark or period
+        if not (text.endswith('。') or text.endswith('？')):
             text = text + '。'
             logger.info(f"Added Chinese period. Updated text: '{text}'")
     else:  # Assume English
-        if not text.endswith('.'):
+        # Check if text ends with English question mark or period
+        if not (text.endswith('.') or text.endswith('?')):
             text = text + '.'
             logger.info(f"Added English period. Updated text: '{text}'")
     
