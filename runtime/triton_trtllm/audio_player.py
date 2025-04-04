@@ -3,6 +3,38 @@ import os
 from pathlib import Path
 from IPython.display import Audio, display
 
+"""
+Usage:
+1. In Jupyter Notebook:
+   from audio_player import play_wav_file
+   
+   # Play audio with filename only
+   play_wav_file('57987919c743a2d12e744b0e2c5074a1')
+   
+   # Or with .wav extension
+   play_wav_file('57987919c743a2d12e744b0e2c5074a1.wav')
+
+2. From Command Line:
+   # Run from terminal
+   python audio_player.py --filename 57987919c743a2d12e744b0e2c5074a1
+   
+   # Or with .wav extension
+   python audio_player.py --filename 57987919c743a2d12e744b0e2c5074a1.wav
+
+File Structure:
+- The script expects WAV files to be in: /root/Spark-TTS/results/<filename>/<filename>.wav
+- Example path: /root/Spark-TTS/results/57987919c743a2d12e744b0e2c5074a1/57987919c743a2d12e744b0e2c5074a1.wav
+
+Returns:
+- True: if audio file is found and player is displayed
+- False: if file not found or error occurs
+
+Note:
+- Best used in Jupyter Notebook for interactive audio playback
+- Automatically displays audio player widget with play/pause controls
+- Autoplay is enabled by default
+"""
+
 def play_wav_file(filename):
     # Remove .wav extension if present
     filename = filename.replace('.wav', '')
