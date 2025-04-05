@@ -1,5 +1,27 @@
+import os
+from audio_player import play_wav_file
 from audio_player import play_wav_file
 import time
+
+def find_wav_files(directory):
+    wav_files = []
+    # Walk through all directories and files
+    for root, dirs, files in os.walk(directory):
+        # Find files with .wav extension (case insensitive)
+        for file in files:
+            if file.lower().endswith('.wav'):
+                # Get full path of the wav file
+                full_path = os.path.join(root, file)
+                wav_files.append(full_path)
+    return wav_files
+
+# Expand the ~ to full home directory path
+results_dir = os.path.expanduser("~/Spark-TTS/results")
+wav_files = find_wav_files(results_dir)
+
+# Print all found wav files
+for wav_file in wav_files:
+    print(wav_file)
 
 def play_all_wavs(wav_files, delay=2):  # delay in seconds between files
     for wav_path in wav_files:
