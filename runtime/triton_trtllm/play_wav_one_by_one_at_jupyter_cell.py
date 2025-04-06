@@ -3,6 +3,7 @@ from audio_player import play_wav_file
 import time
 import glob
 import re
+from IPython.display import display, HTML, Audio
 
 def find_wav_files(directory):
     wav_files = []
@@ -95,22 +96,21 @@ def play_all_wavs(wav_files, delay=1):  # delay in seconds between files
         # Get the corresponding text
         text_content = get_corresponding_text(wav_path)
         
-        # Display the text before playing
-        print(f"\n=== Playing: {wav_filename} ===")
+        # Display the text and create a button for playing
+        print(f"\n=== File: {wav_filename} ===")
         print(f"Text: {text_content}")
         
-        # Play the wav file
-        # The original code was using the directory name as ID, let's keep that
-        # but fall back to the full path if needed
+        # Create a button to play the audio file
         try:
-            wav_id = wav_path.split('/')[-2]  # Gets the parent directory name
-            play_wav_file(wav_id)
-        except Exception as e:
-            print(f"Error playing with directory ID, trying full path: {e}")
-            play_wav_file(wav_path)
-        
-        # Wait for a bit before playing the next file
-        time.sleep(delay)
+            # Create a unique ID for each audio element
+            audio_id = f"audio_{hash(wav_path) & 0xFFFFFFFF}"
+            
+            # Create an Audio widget with the wav file
+            audio = Audio(filename=wav_path, autoplay=False)
+            display(audio)
+        except ImportError:
+            print(f"Please install IPython to use the interactive play button.")
+            print(f"Alternatively, you can play the file manually from: {wav_path}")
 
 # Expand the ~ to full home directory path
 results_dir = os.path.expanduser("~/Spark-TTS/results")
