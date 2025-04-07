@@ -11,5 +11,7 @@ nohup python server-api.py > server.log 2>&1 &
 echo "Spark-tts Restful api is running in background on port 9003"
 
 # Run TTS batch processor
+echo "Waiting 15 seconds for Spark-TTS to fully establish..."
+sleep 15
 nohup python3 tts_batch_processor.py --total-sentences 20 --total_sentences_per_batch 10 > batch_processor.log 2>&1 &
 echo "TTS batch processor started in background"
